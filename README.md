@@ -39,7 +39,7 @@ py文件有详细注释。
 ## 环境搭建
 
 ```bash
-conda create -n openmmlab python=3.7 pytorch==1.6.0 cudatoolkit=10.1 torchvision -c pytorch -y
+conda create -n openmmlab python=3.8 pytorch==1.10.2 cudatoolkit=10.2 torchvision -c pytorch -y
 conda activate openmmlab
 pip install openmim
 mim install mmcv-full
