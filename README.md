@@ -83,3 +83,14 @@ python test.py
 python test_nms.py
 ```
 
+## utils目录内文件作用
+
+**abspos2box.py**	输入绝对坐标和图片，在图片上画框
+
+**check_version.py**	检查环境是否配置好
+
+**read_pkl.py**	读取pkl文件（生成的中间标签）
+
+**sample开头的文件：**  模板文件，用来参考的
+
+**visualize开头的文件：**  与src中对应，但是加了可视化功能，可视化文件输出的路径要自己输入
