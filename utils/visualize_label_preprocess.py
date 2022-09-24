@@ -36,7 +36,7 @@ def convert_label_to_midlle(imgs_path, labels_path, annotation_path, visuallized
 
         img = mmcv.imread(img_path)  # 读取图片
         pictured_img = img.copy()
-        box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  # 红绿蓝对应1，2，3
+        box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  # 由于是cv读取图片，通道为bgr，蓝绿红对应1，2，3
 
         height, width = img.shape[:2]  # 读取图片宽高
 
@@ -99,6 +99,7 @@ def convert_label_to_midlle(imgs_path, labels_path, annotation_path, visuallized
     mmcv.dump(data_infos, annotation_path)
 
 
-convert_label_to_midlle('../my_datasets/val/data', '../my_datasets/val/label', '../my_datasets/val.pkl',
-                        '../my_test_result/visualized_val')
-# convert_label_to_midlle('../datasets/test/data', '../result/label', '../datasets/test.pkl')
+convert_label_to_midlle('../datasets/val/data', '../datasets/val/label', '../datasets/val.pkl',
+                        '../result/visualized_val')
+convert_label_to_midlle('../datasets/train/data', '../datasets/train/label', '../datasets/train.pkl',
+                        '../result/visualized_train')

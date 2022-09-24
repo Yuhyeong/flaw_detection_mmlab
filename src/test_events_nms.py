@@ -61,7 +61,7 @@ def nms(cls_detect_array, threshold=0.5):
 
 
 # 对一个文件夹内的所有图片进行相对坐标提取，并使用nms
-def batch_inference(imgs_dir_path, out_labels_dir_path):
+def one_inference(imgs_dir_path, out_labels_dir_path):
     # 读取配置
     config_file = '../work_dir_custom/customformat.py'
     checkpoint_file = '../work_dir_custom/batch2_8.pth'

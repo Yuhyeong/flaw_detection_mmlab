@@ -30,11 +30,13 @@ cfg.data.val.classes = ('1', '2', '3')
 
 # 修改bbox_head中的类别数
 cfg.model.roi_head.bbox_head.num_classes = 3
+# 使用预训练好的faster rcnn模型用于finetuning
+cfg.load_from = '../work_dir_custom/batch2_circle_hlf/epoch_2.pth'
 # 设置工作目录用于存放log和临时文件
 cfg.work_dir = '../work_dir_custom'
 
-# 原本的学习率是在8卡基础上训练设置的，现在双卡需要除以4，单卡则8
-cfg.optimizer.lr = 0.000000000015
+# 本模型在学习率1.5e-10上表现较好
+cfg.optimizer.lr = 0.000000000045
 cfg.lr_config.warmup = None
 cfg.log_config.interval = 100
 

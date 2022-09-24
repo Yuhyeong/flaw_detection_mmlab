@@ -11,11 +11,11 @@ import math
 # OUTPUT:
 # 将中间格式标签存入annotation_path（pkl文件）
 
-
-def extract_circle(ori_imgs_dir, circles_dir):
+# 输入事件流所在文件夹ori_imgs_dir，输出到out_circles_dir
+def extract_circle(ori_imgs_dir, out_circles_dir):
     # 若目录不存在则创建文件夹
-    if not os.path.exists(circles_dir):
-        os.mkdir(circles_dir)
+    if not os.path.exists(out_circles_dir):
+        os.mkdir(out_circles_dir)
 
     # 设置圆心提取使用的变量
     template = cv2.imread('../test_data/template_new.png')
@@ -26,11 +26,10 @@ def extract_circle(ori_imgs_dir, circles_dir):
     # 遍历原图
     img_list = os.listdir(ori_imgs_dir)
     for img_name in img_list:
-
         print(img_name)
 
         img_path = os.path.join(ori_imgs_dir, img_name)
-        out_cirle_path = os.path.join(circles_dir, img_name)
+        out_cirle_path = os.path.join(out_circles_dir, img_name)
         img = cv2.imread(img_path)
 
         # 提取圆心
@@ -48,6 +47,10 @@ def extract_circle(ori_imgs_dir, circles_dir):
         box_top = max(0, int(circle_centerY - large_radium))
         box_bottom = min(800, int(circle_centerY + large_radium))
         circle_box_img = img[box_top:box_bottom, box_left:box_right, :]
+        circle_h, circle_w = circle_box_img.shape[:2]
+
+        if circle_h!=circle_w:
+            continue
 
         # 在圆片box上提取圆心
         res = cv2.matchTemplate(circle_box_img, template, eval('cv2.TM_CCOEFF'))
@@ -58,22 +61,42 @@ def extract_circle(ori_imgs_dir, circles_dir):
         circle_centerY = (top_left[1] + bottom_right[1]) / 2
         center = (int(circle_centerX), int(circle_centerY))
 
+        # 遮盖大圆，（大圆半径-21，大圆半径加201 ）
+        # 等价于在大圆半径
+        # 大圆粗线画法
+        paint_radium = large_radium + 90
+        cv2.circle(circle_box_img, center, paint_radium, 0, 222)
+
         # 遮盖小圆
-        paint_radium = 1
-        while paint_radium < small_radium -4:
-            cv2.circle(circle_box_img, center, paint_radium, 0, 2)
-            paint_radium += 1
+        # 小圆粗线画法
+        cv2.circle(circle_box_img, center, int(small_radium / 2), 0, int(small_radium + 10))
 
-        # 遮盖大圆
-        paint_radium = large_radium - 20
-        while paint_radium < large_radium + 200:
-            # 提取圆心
-            cv2.circle(circle_box_img, center, paint_radium, 0, 2)
-            paint_radium += 1
-
+        # # 提取圆心
         # cv2.circle(circle_box_img, center, large_radium, (100,200,100), 2)
 
         cv2.imwrite(out_cirle_path, circle_box_img)
 
 
-extract_circle('../datasets/test/data', '../result/only_circles')
+def extract_all_events_denoise(all_events_dir_path, all_new_events_dir_path):
+
+    if not os.path.exists(all_new_events_dir_path):
+        os.mkdir(all_new_events_dir_path)
+
+    # 遍历所有事件流
+    events_list = os.listdir(all_events_dir_path)
+    for events_name in events_list:
+
+        # 事件流所在文件夹
+        events_dir_path = os.path.join(all_events_dir_path,events_name)
+        # 输出新事件流所在文件夹
+        new_events_dir_path = os.path.join(all_new_events_dir_path,events_name)
+
+        if not os.path.exists(new_events_dir_path):
+            os.mkdir(new_events_dir_path)
+
+        extract_circle(events_dir_path, new_events_dir_path)
+
+
+
+extract_all_events_denoise('../test_data/denoise_output_gaussian','../result/denoise_circle')
+# extract_circle('../datasets/test/data', '../result/only_circles')

@@ -13,7 +13,7 @@ from pprint import pprint
 # 输出一个事件流的推理标签
 
 # 对一个（x1,y1,x2,y2,score）列表使用nms算法
-def nms(cls_detect_array, threshold=0.5):
+def nms(cls_detect_array, threshold=0.4):
     # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体列表
 
     # 若分类检测框数量为空则返回空数np数组
@@ -63,8 +63,10 @@ def nms(cls_detect_array, threshold=0.5):
 def batch_inference(imgs_dir_path, out_labels_dir_path, visuallized_dir_path):
     # 读取配置
     config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/batch1_12.pth'
-    device = 'cpu'
+    checkpoint_file = '../work_dir_custom/epoch_3.pth'
+    device = 'cuda'
+    if not os.path.exists(out_labels_dir_path):
+        os.mkdir(out_labels_dir_path)
 
     # 初始化检测器
     model = init_detector(config_file, checkpoint_file, device=device)
@@ -156,4 +158,4 @@ def batch_inference(imgs_dir_path, out_labels_dir_path, visuallized_dir_path):
         cv2.imwrite(os.path.join(visuallized_dir_path, img), pictured_img)
 
 
-batch_inference('../datasets/test/data', '../result/label', '../result/visualized')
+batch_inference('../result/only_circles', '../result/label', '../result/visualized')

@@ -23,6 +23,8 @@ def split2val(train_dir, val_dir):
 
         if i % 50 == 0:
             if os.path.exists(os.path.join(train_label_dir, label_name)):
+                print(img_name)
+
                 shutil.move(os.path.join(train_img_dir, img_name), val_img_dir)
                 shutil.move(os.path.join(train_label_dir, label_name), val_label_dir)
 
