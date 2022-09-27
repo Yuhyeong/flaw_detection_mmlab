@@ -6,13 +6,13 @@ from mmdet.apis import init_detector, inference_detector
 from pprint import pprint
 
 
-# 对一个（x1,y1,x2,y2,score）的np数组 列表使用nms算法
+# 对一个（x,y,w,h,score）的np数组 列表使用nms算法
 def nms(cls_detect_array, threshold=0.5):
     # INPUT:
-    # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（x1,y1,x2,y2,score）
+    # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（x,y,w,h,score）
     # threshold: IoU交并比筛选阈值，高于threshold的删除
     # OUTPUT:
-    # 返回一个图片的“一个检测类”检测框体的，经过nms处理的np.array:（x1,y1,x2,y2,score）
+    # 返回一个图片的“一个检测类”检测框体的，经过nms处理的np.array:（x,y,w,h,score）
 
     # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体np数组
 
@@ -34,8 +34,9 @@ def nms(cls_detect_array, threshold=0.5):
             break
 
         # 从最高分开始获取框体坐标，并计算框体体积
-        x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
-        high_area = (x2 - x1 + 1) * (y2 - y1 + 1)
+        # x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+        x1, y1, w1, h1 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+        high_area = w1 * h1
 
         # 将高分框与其他低分框进行交并比计算,若合并则置信度设为0，遍历其余，最后重新按置信度从大到小排序，保持原数组长度不变，最后最后提取非0置信度的元素
         j = i + 1
@@ -45,14 +46,19 @@ def nms(cls_detect_array, threshold=0.5):
                 break
 
             # 获取其他框体坐标
-            x3, y3, x4, y4 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
+            # x3, y3, x4, y4 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
+            #                  cls_detect_array[j][3]
+            x2, y2, w2, h2 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
                              cls_detect_array[j][3]
-            low_area = (x4 - x3 + 1) * (y4 - y3 + 1)
+
+            low_area = w2 * h2
 
             # 计算相交部分框体坐标，若无则返回0
             # 感觉有点问题，
-            and_x1, and_y1, and_x2, and_y2 = np.maximum(x1, x3), np.maximum(y1, y3), np.minimum(x2, x4), np.minimum(y2,
-                                                                                                                    y4)
+            and_x1, and_y1, and_x2, and_y2 = np.maximum(x1, x2), np.maximum(y1, y2), np.minimum(x1 + w1,
+                                                                                                x2 + w2), np.minimum(
+                y1 + h1, y2 + h2)
+
             and_w, and_h = np.maximum(0, and_x2 - and_x1), np.maximum(0, and_y2 - and_y1 + 1)
             and_area = and_w * and_h
 
@@ -131,9 +137,9 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
 
         # 若无模型且无模型路径
         if checkpoint_file == '':
-            checkpoint_file = '../work_dir_custom/epoch_3.pth'
+            checkpoint_file = '../work_dir_custom/batch2_9.pth'
         # 读取配置
-        checkpoint_file = '../work_dir_custom/epoch_3.pth'
+        checkpoint_file = '../work_dir_custom/batch2_9.pth'
         # 初始化检测器
         model = init_detector(config_file, checkpoint_file, device=device)
 
@@ -164,21 +170,19 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
     # 覆盖写入本地文件，且文件名与图片相对应
     lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
 
-    # 画框并保存
-    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-    pictured_img_path = os.path.join('../result/only_circles', os.path.basename(events_dir_path) + '.jpg')
-    pictured_img = cv2.imread(pictured_img_path)
-    for line in lines:
-        top_left = (int(line[1]), int(line[3]))
-        bottom_right = (int(line[2]), int(line[4]))
-        cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[cls_name - 1], 2)
-    cv2.imwrite(os.path.join('../result/visualized', os.path.basename(events_dir_path) + '.jpg'), pictured_img)
-
     # 分割后处理坐标为相对坐标
     cls = lines[:, 0]
-    pos = np.array(lines)[:, 1:5] - 356
+    pos = np.array(lines)[:, 1:3] - 356
+    w = lines[:, 3]
+    h = lines[:, 4]
     score = lines[:, 5]
-    lines = np.insert(np.insert(pos, 0, cls, axis=1), 5, score, axis=1)
+
+    # 重新拼接
+    temp = np.insert(pos, 0, cls, axis=1)
+    temp = np.insert(temp, 3, w, axis=1)
+    temp = np.insert(temp, 4, h, axis=1)
+    temp = np.insert(temp, 5, score, axis=1)
+    lines = temp
 
     # 筛选置信度大于0.4的
     if lines.size != 0:
@@ -189,10 +193,10 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
     ans = []
     for line in lines:
         cls_name = int(line[0])
-        centerX = (line[1] + line[3]) / 2
-        centerY = (line[2] + line[4]) / 2
-        boxW = int(line[3] - line[1] + 1)
-        boxH = int(line[4] - line[2] + 1)
+        centerX = int(line[1])
+        centerY = int(line[2])
+        boxW = int(line[3])
+        boxH = int(line[4])
         score = line[5]
 
         ans.append(
@@ -218,7 +222,7 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path):
 
     # 读取配置
     config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/epoch_1.pth'
+    checkpoint_file = '../work_dir_custom/batch2_9.pth'
     device = 'cuda'
 
     # 初始化检测器
@@ -233,5 +237,5 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path):
         single_events_inference(single_events_path, out_label_path, model)
 
 
-# single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
-all_events_inference('../datasets/test/data', '../result/label')
+single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
+# all_events_inference('datasets/test/data', 'result/label')
