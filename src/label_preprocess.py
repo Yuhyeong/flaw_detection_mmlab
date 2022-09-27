@@ -60,7 +60,7 @@ def convert_label_to_midlle(imgs_path, labels_path, annotation_path):
 
             # 处理[中心点绝对坐标x,中心点绝对坐标y,宽H,高W]---->[左上角绝对坐标x,左上角绝对坐标y，右下角绝对坐标x,右下角绝对坐标y]
             centerX, centerY = float(all_factors[1]), float(all_factors[2])
-            boxW, boxH = float(all_factors[3]), int(all_factors[4])
+            boxW, boxH = int(all_factors[3].split('.')[0]), int(all_factors[4].split('.')[0])
             x1, y1 = centerX - float(boxW / 2), centerY - float(boxH / 2)  # 左上角
             x2, y2 = centerX + float(boxW / 2), centerY + float(boxH / 2)  # 右下角
             bbox.append(x1)
@@ -85,4 +85,4 @@ def convert_label_to_midlle(imgs_path, labels_path, annotation_path):
 
 
 convert_label_to_midlle('../datasets/train/data', '../datasets/train/label', '../datasets/train.pkl')
-# convert_label_to_midlle('../datasets/val/data', '../datasets/val/label', '../datasets/val.pkl')
+convert_label_to_midlle('../datasets/val/data', '../datasets/val/label', '../datasets/val.pkl')

@@ -12,9 +12,15 @@ from pprint import pprint
 # OUTPUT:
 # 输出一个事件流的推理标签
 
-# 对一个（x1,y1,x2,y2,score）列表使用nms算法
-def nms(cls_detect_array, threshold=0.4):
-    # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体列表
+# 对一个（x1,y1,x2,y2,score）的np数组 列表使用nms算法
+def nms(cls_detect_array, threshold=0.5):
+    # INPUT:
+    # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（x1,y1,x2,y2,score）
+    # threshold: IoU交并比筛选阈值，高于threshold的删除
+    # OUTPUT:
+    # 返回一个图片的“一个检测类”检测框体的，经过nms处理的np.array:（x1,y1,x2,y2,score）
+
+    # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体np数组
 
     # 若分类检测框数量为空则返回空数np数组
     if len(cls_detect_array) == 0:
@@ -23,7 +29,14 @@ def nms(cls_detect_array, threshold=0.4):
     # 遍历所有框体进行nms合并
     for i in range(len(cls_detect_array)):
 
-        if cls_detect_array[i][4] < 0.05:
+        if cls_detect_array[i][4] < 0.3:  # 置信度小于0.3的都舍弃
+
+            if i == 0:
+                cls_detect_array = np.empty(shape=(0, 0))
+            else:
+                # cls_detect_array[i][4] = 0
+                return cls_detect_array[:i, :]
+
             break
 
         # 从最高分开始获取框体坐标，并计算框体体积
@@ -33,6 +46,9 @@ def nms(cls_detect_array, threshold=0.4):
         # 将高分框与其他低分框进行交并比计算,若合并则置信度设为0，遍历其余，最后重新按置信度从大到小排序，保持原数组长度不变，最后最后提取非0置信度的元素
         j = i + 1
         while j < len(cls_detect_array):
+
+            if cls_detect_array[j][4] == 0:
+                break
 
             # 获取其他框体坐标
             x3, y3, x4, y4 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
@@ -55,6 +71,10 @@ def nms(cls_detect_array, threshold=0.4):
 
         # 按置信度排序，获得使用nms算法处理后的检测框列表
         cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
+
+    if cls_detect_array.size != 0:
+        cond = np.where(cls_detect_array[:, 4] > 0.001)
+        cls_detect_array = cls_detect_array[cond]  # 剔除0分
 
     return cls_detect_array
 

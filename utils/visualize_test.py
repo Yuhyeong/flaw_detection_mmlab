@@ -17,7 +17,7 @@ def batch_inference_and_visualize(imgs_dir_path, out_labels_dir_path, visuallize
     # 读取配置
     config_file = '../work_dir_custom/customformat.py'
     checkpoint_file = '../work_dir_custom/batch2_8.pth'
-    device = 'cpu'
+    device = 'cuda'
 
     # 初始化检测器
     model = init_detector(config_file, checkpoint_file, device=device)

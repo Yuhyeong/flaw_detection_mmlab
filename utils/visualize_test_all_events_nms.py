@@ -29,7 +29,7 @@ def nms(cls_detect_array, threshold=0.5):
                 cls_detect_array = np.empty(shape=(0, 0))
             else:
                 # cls_detect_array[i][4] = 0
-                return cls_detect_array[:i,:]
+                return cls_detect_array[:i, :]
 
             break
 
@@ -164,27 +164,42 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
     # 覆盖写入本地文件，且文件名与图片相对应
     lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
 
+    # 画框并保存
+    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+    pictured_img_path = os.path.join('../result/only_circles', os.path.basename(events_dir_path) + '.jpg')
+    pictured_img = cv2.imread(pictured_img_path)
+    for line in lines:
+        top_left = (int(line[1]), int(line[3]))
+        bottom_right = (int(line[2]), int(line[4]))
+        cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[cls_name - 1], 2)
+    cv2.imwrite(os.path.join('../result/visualized', os.path.basename(events_dir_path) + '.jpg'), pictured_img)
+
+    # 分割后处理坐标为相对坐标
     cls = lines[:, 0]
     pos = np.array(lines)[:, 1:5] - 356
     score = lines[:, 5]
-
     lines = np.insert(np.insert(pos, 0, cls, axis=1), 5, score, axis=1)
 
+    # 筛选置信度大于0.4的
     if lines.size != 0:
         cond = np.where(lines[:, 5] > 0.4)
         lines = lines[cond]  # 剔除0分
 
+    # txt每一行内容确定
     ans = []
     for line in lines:
         cls_name = int(line[0])
         centerX = (line[1] + line[3]) / 2
         centerY = (line[2] + line[4]) / 2
-        boxW = int(line[3] - line[1]+1)
-        boxH = int(line[4] - line[2]+1)
+        boxW = int(line[3] - line[1] + 1)
+        boxH = int(line[4] - line[2] + 1)
         score = line[5]
 
-        ans.append(str(cls_name)+','+str(centerX)+','+str(centerY)+','+str(boxW)+','+str(boxH)+','+str(score))
+        ans.append(
+            str(cls_name) + ',' + str(centerX) + ',' + str(centerY) + ',' + str(boxW) + ',' + str(boxH) + ',' + str(
+                score))
 
+    # ans中内容写入文件
     out = ''
     if len(ans) == 0:
         out += 'Perfect'
@@ -215,8 +230,8 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path):
         # 单事件流文件夹
         single_events_path = os.path.join(all_events_dir_path, events_name)
         out_label_path = os.path.join(out_labels_dir_path, events_name + '.txt')
-        single_events_path(single_events_path, out_label_path)
+        single_events_inference(single_events_path, out_label_path, model)
 
 
-single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
-# all_events_inference('datasets/test/data', 'result/label')
+# single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
+all_events_inference('../datasets/test/data', '../result/label')
