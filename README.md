@@ -78,7 +78,7 @@ pip install -v -e .
 暂时先只对一整个文件夹内的所有图片进行处理
 
 ```bash
-python test.py
+python test_events_XYWH.py
 # 或者
 python test_nms.py
 ```

@@ -15,11 +15,23 @@ from pprint import pprint
 # 输出带检测框的图像
 
 # 对一个文件夹内的所有图片进行相对坐标提取，并可视化
-def batch_inference(imgs_dir_path, out_labels_dir_path, visuallized_dir_path):
+def batch_inference(imgs_dir_path, out_labels_dir_path, visuallized_dir_path, mode='', checkpoint_file=''):
     # 读取配置
-    config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/batch2_9.pth'
+    if mode == 'faster':
+        config_file = '../work_dir_faster/faster.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_faster/epoch_12.pth'
+    elif mode == 'cascade':
+        config_file = '../work_dir_cascade/cascade.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_cascade/epoch_12.pth'
+    else:
+        config_file = '../work_dir_custom/customformat.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_custom/epoch_12.pth'
+
     device = 'cuda'
+
     if not os.path.exists(out_labels_dir_path):
         os.mkdir(out_labels_dir_path)
 
@@ -114,6 +126,25 @@ def batch_inference(imgs_dir_path, out_labels_dir_path, visuallized_dir_path):
         cv2.imwrite(os.path.join(visuallized_dir_path, img), pictured_img)
 
 
+def result_fliter(cls_detect_array):
+    if len(cls_detect_array) == 0:
+        return np.empty(shape=(0, 0))
+
+    for i in range(len(cls_detect_array)):
+        x, y, w, h = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+
+        if (x + w > 716) or (y + h > 716):
+            cls_detect_array[i][4] = 0
+
+        cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
+
+    if cls_detect_array.size != 0:
+        cond = np.where(cls_detect_array[:, 4] > 0.001)
+        cls_detect_array = cls_detect_array[cond]  # 剔除0分
+
+    return cls_detect_array
+
+
 # 对一个（x,y,w,h,score）的np数组 列表使用nms算法
 def nms(cls_detect_array, threshold=0.5):
     # INPUT:
@@ -188,11 +219,23 @@ def nms(cls_detect_array, threshold=0.5):
 
 
 # 对一个文件夹内的所有图片进行相对坐标提取，并使用nms，并可视化
-def batch_inference_nms(imgs_dir_path, out_labels_dir_path, visuallized_dir_path):
+def batch_inference_nms(imgs_dir_path, out_labels_dir_path, visuallized_dir_path, mode='', checkpoint_file=''):
     # 读取配置
-    config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/batch2_9.pth'
+    if mode == 'faster':
+        config_file = '../work_dir_faster/faster.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_faster/epoch_12.pth'
+    elif mode == 'cascade':
+        config_file = '../work_dir_cascade/cascade.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_cascade/epoch_12.pth'
+    else:
+        config_file = '../work_dir_custom/customformat.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_custom/epoch_12.pth'
+
     device = 'cuda'
+
     if not os.path.exists(out_labels_dir_path):
         os.mkdir(out_labels_dir_path)
 
@@ -234,7 +277,9 @@ def batch_inference_nms(imgs_dir_path, out_labels_dir_path, visuallized_dir_path
         # 对单个图片进行推理结果分析
         for i in range(len(result)):
 
-            boxes_info = nms(result[i], threshold=0.2)  # 单个图片的每个分类先使用nms筛选
+            boxes_info = result_fliter(result[i]).tolist()
+
+            boxes_info = nms(boxes_info, threshold=0.2)  # 单个图片的每个分类先使用nms筛选
 
             # 第i类别，若无检测则退出。用j遍历所有瑕疵框
             # 下面的循环结束后，得到的是本图片第i个分类下的置信度较高，且使用过nms算法的检测框列表
@@ -290,7 +335,9 @@ def batch_inference_nms(imgs_dir_path, out_labels_dir_path, visuallized_dir_path
         cv2.imwrite(os.path.join(visuallized_dir_path, img), pictured_img)
 
 
-batch_inference_nms('../datasets/test/data_only30', '../result/data_only30_label',
-                    '../result/visualized_test')
+batch_inference_nms('../datasets/val/data', '../result/label_val',
+                    '../result/visualized_testOnVal', 'faster', '../work_dir_faster/1.5e-9/epoch_12.pth')
+# batch_inference_nms('../datasets/val/data', '../result/label',
+#                     '../result/visualized_test_fliter', 'cascade', '../work_dir_cascade/1.5e-9/epoch_12.pth')
 # batch_inference('../datasets/test/data_only30', '../result/data_only30_label',
 #                 '../result/visualized_test')

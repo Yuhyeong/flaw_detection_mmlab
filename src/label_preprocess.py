@@ -4,9 +4,6 @@ from pprint import pprint
 import numpy as np
 
 
-# 待办：检查每个图片的ann里面是不是只能包含一个标签
-
-
 # INPUT:
 # imgs_path：所有图片所在文件夹
 # labels_path：所有标签所在文件夹（类别，瑕疵中心绝对坐标X,瑕疵中心绝对坐标Y,瑕疵框宽W,瑕疵框高H）
@@ -14,7 +11,6 @@ import numpy as np
 
 # OUTPUT:
 # 将中间格式标签存入annotation_path
-
 def convert_label_to_midlle(imgs_path, labels_path, annotation_path):
     CLASSES = ('1', '2', '3')
     # 类别反查表

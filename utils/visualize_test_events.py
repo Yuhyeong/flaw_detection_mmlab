@@ -170,6 +170,16 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
     # 覆盖写入本地文件，且文件名与图片相对应
     lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
 
+    # 凭借绝对坐标画框并保存
+    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+    pictured_img_path = os.path.join('../result/only_circles', os.path.basename(events_dir_path) + '.jpg')
+    pictured_img = cv2.imread(pictured_img_path)
+    for line in lines:
+        top_left = (int(line[1]), int(line[2]))
+        bottom_right = (int(line[1] + line[3]), int(line[2] + line[4]))
+        cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[int(line[0]) - 1], 2)
+    cv2.imwrite(os.path.join('../result/visualized', os.path.basename(events_dir_path) + '.jpg'), pictured_img)
+
     # 分割后处理坐标为相对坐标
     cls = lines[:, 0]
     pos = np.array(lines)[:, 1:3] - 356
@@ -216,13 +226,24 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
 
 
 # 对一个文件夹内的所有文件夹中的所有图片（所有事件流）进行推理，并使用nms，得到所有事件流的检测结果
-def all_events_inference(all_events_dir_path, out_labels_dir_path):
+def all_events_inference(all_events_dir_path, out_labels_dir_path, mode='', checkpoint_file=''):
     if not os.path.exists(out_labels_dir_path):
         os.mkdir(out_labels_dir_path)
 
     # 读取配置
-    config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/batch2_9.pth'
+    if mode == 'faster':
+        config_file = '../work_dir_faster/faster.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_faster/epoch_12.pth'
+    elif mode == 'cascade':
+        config_file = '../work_dir_cascade/cascade.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_cascade/epoch_12.pth'
+    else:
+        config_file = '../work_dir_custom/customformat.py'
+        if checkpoint_file == '':
+            checkpoint_file = '../work_dir_custom/epoch_12.pth'
+
     device = 'cuda'
 
     # 初始化检测器
@@ -237,5 +258,6 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path):
         single_events_inference(single_events_path, out_label_path, model)
 
 
-single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
-# all_events_inference('datasets/test/data', 'result/label')
+# single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
+all_events_inference('../datasets/val/data', '../result/label_val', 'faster', )
+all_events_inference('../datasets/val/data', '../result/label_val', 'cascade', )

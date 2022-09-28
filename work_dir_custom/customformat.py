@@ -224,7 +224,7 @@ data = dict(
         data_root='../datasets/',
         classes=('1', '2', '3')))
 evaluation = dict(interval=1, metric='mAP')
-optimizer = dict(type='SGD', lr=1.5e-11, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=1.5e-09, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 lr_config = dict(
     policy='step',

@@ -6,13 +6,42 @@ from mmdet.apis import init_detector, inference_detector
 from pprint import pprint
 
 
-# 对一个（x,y,w,h,score）的np数组 列表使用nms算法
-def nms(cls_detect_array, threshold=0.5):
+########################################################
+########################################################
+#   用于推理坐标为（x,y,w,h,score）格式的模型
+#   现在只用在custom的上面
+#   如：faster_rcnn_r50_caffe_fpn_mstrain_1x_coco.py
+########################################################
+########################################################
+
+
+# 剔除框体在图像外的
+def result_fliter_start(cls_detect_array):
+    if len(cls_detect_array) == 0:
+        return np.empty(shape=(0, 0))
+
+    for i in range(len(cls_detect_array)):
+        x, y, w, h = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+
+        if (x + w > 706) or (y + h > 706):
+            cls_detect_array[i][4] = 0
+
+        cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
+
+    if cls_detect_array.size != 0:
+        cond = np.where(cls_detect_array[:, 4] > 0.001)
+        cls_detect_array = cls_detect_array[cond]  # 剔除0分
+
+    return cls_detect_array
+
+
+# 对 一个（x,y,w,h,score）的np数组 列表使用nms算法
+def nms(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
     # INPUT:
-    # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（x,y,w,h,score）
+    # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（左上角绝对坐标x,左上角绝对坐标y,w,h,score）
     # threshold: IoU交并比筛选阈值，高于threshold的删除
     # OUTPUT:
-    # 返回一个图片的“一个检测类”检测框体的，经过nms处理的np.array:（x,y,w,h,score）
+    # 返回一个图片的“一个检测类”检测框体的，经过nms处理的np.array:（左上角绝对坐标x,左上角绝对坐标y,w,h,score）
 
     # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体np数组
 
@@ -23,18 +52,17 @@ def nms(cls_detect_array, threshold=0.5):
     # 遍历所有框体进行nms合并
     for i in range(len(cls_detect_array)):
 
-        if cls_detect_array[i][4] < 0.3:  # 置信度小于0.3的都舍弃
+        # 置信度小于0.3的都舍弃
+        if cls_detect_array[i][4] < score_thresh:
 
             if i == 0:
                 cls_detect_array = np.empty(shape=(0, 0))
             else:
-                # cls_detect_array[i][4] = 0
                 return cls_detect_array[:i, :]
 
             break
 
         # 从最高分开始获取框体坐标，并计算框体体积
-        # x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
         x1, y1, w1, h1 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
         high_area = w1 * h1
 
@@ -46,15 +74,12 @@ def nms(cls_detect_array, threshold=0.5):
                 break
 
             # 获取其他框体坐标
-            # x3, y3, x4, y4 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
-            #                  cls_detect_array[j][3]
             x2, y2, w2, h2 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
                              cls_detect_array[j][3]
 
             low_area = w2 * h2
 
             # 计算相交部分框体坐标，若无则返回0
-            # 感觉有点问题，
             and_x1, and_y1, and_x2, and_y2 = np.maximum(x1, x2), np.maximum(y1, y2), np.minimum(x1 + w1,
                                                                                                 x2 + w2), np.minimum(
                 y1 + h1, y2 + h2)
@@ -79,37 +104,57 @@ def nms(cls_detect_array, threshold=0.5):
     return cls_detect_array
 
 
+# 左上角点若在周围20个像素里则认为是邻居
+def is_neighbor(xi, yi, xj, yj, dist=20):
+    if abs(xj - xi) < dist and abs(yj - yi) < dist:
+        return True
+    else:
+        return False
+
+
+# 筛选结果
+def result_fliter_final(cls_detect_array):
+    # 每个框体有几个邻居
+    neighbors = np.zeros(len(cls_detect_array))
+
+    # 遍历所有框体
+    for i in range(len(cls_detect_array)):
+
+        # 判定与其他框体是否为邻居
+        for j in range(len(cls_detect_array)):
+
+            # 若是则邻居加一
+            if is_neighbor(cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[j][0],
+                           cls_detect_array[j][1]):
+                neighbors[i] = neighbors[i] + 1
+
+    # 若不为空的结果
+    if cls_detect_array.size != 0:
+        # 小于十个邻居的删除
+        cond = np.where(neighbors > 3)
+        cls_detect_array = cls_detect_array[cond]  # 小于十个邻居的
+
+    return cls_detect_array
+
+
 # 对一个图片进行推理，得到三类检测列表
-def img_inference(img_path, model=None, checkpoint_file=''):
-    # INPUT:
-    # img_path:单一图片所在目录
-    # model:读取好的模型
-    # checkpoint_file：若不传入读取好的模型，则应传入模型路径
-    # OUTPUT:
-    # 返回一个图片的检测框体List
-
-    # 若不传入模型，则检查是否有模型路径
+def img_inference(img_path, model=None, config_file='', checkpoint_file=''):
     if model == None:
-
-        config_file = '../work_dir_custom/customformat.py'
         device = 'cuda'
-
-        # 若无模型且无模型路径
-        if checkpoint_file == '':
-            checkpoint_file = '../work_dir_custom/epoch_3.pth'
-        # 读取配置
-        checkpoint_file = '../work_dir_custom/epoch_3.pth'
-        # 初始化检测器
         model = init_detector(config_file, checkpoint_file, device=device)
 
     img_result = [[], [], []]
 
     single_result = inference_detector(model, img_path)
 
+    cls1 = result_fliter_start(np.array(single_result[0]))
+    cls2 = result_fliter_start(np.array(single_result[1]))
+    cls3 = result_fliter_start(np.array(single_result[2]))
+
     # 对本图片每个检测类使用nms算法
-    cls1 = nms(single_result[0], threshold=0.2)
-    cls2 = nms(single_result[1], threshold=0.2)
-    cls3 = nms(single_result[2], threshold=0.2)
+    cls1 = nms(cls1, iou_thresh=0.4, score_thresh=0.2)
+    cls2 = nms(cls2, iou_thresh=0.4, score_thresh=0.2)
+    cls3 = nms(cls3, iou_thresh=0.4, score_thresh=0.2)
 
     # 输入到本图片检测结果
     img_result[0] = cls1.tolist()
@@ -120,7 +165,8 @@ def img_inference(img_path, model=None, checkpoint_file=''):
 
 
 # 对一个文件夹内（一个事件流）的所有图片进行推理，并使用nms，得到本文件夹所有图片的综合检测结果
-def single_events_inference(events_dir_path, out_label_path, model=None, checkpoint_file=''):
+def single_events_inference(events_dir_path, out_label_path, model=None, config_file='', checkpoint_file='',
+                            score_thresh=0.2):
     # INPUT:
     # events_dir_path:单一事件流所在目录
     # out_label_path:单一事件流标签综合结果输出路径（用了nms）
@@ -131,16 +177,7 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
 
     # 若不传入模型，则检查是否有模型路径
     if model == None:
-
-        config_file = '../work_dir_custom/customformat.py'
         device = 'cuda'
-
-        # 若无模型且无模型路径
-        if checkpoint_file == '':
-            checkpoint_file = '../work_dir_custom/batch2_9.pth'
-        # 读取配置
-        checkpoint_file = '../work_dir_custom/batch2_9.pth'
-        # 初始化检测器
         model = init_detector(config_file, checkpoint_file, device=device)
 
     # 本图片所有分类的瑕疵框体
@@ -159,52 +196,48 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
         all_cls[1] += imr_result[1]
         all_cls[2] += imr_result[2]
 
-    cls1 = nms(np.array(all_cls[0]))
-    cls2 = nms(np.array(all_cls[1]))
-    cls3 = nms(np.array(all_cls[2]))
+    # 同一事件流下每一类的大团圆
+    cls1 = nms(np.array(all_cls[0]), iou_thresh=0.5, score_thresh=0.2)
+    cls2 = nms(np.array(all_cls[1]), iou_thresh=0.5, score_thresh=0.2)
+    cls3 = nms(np.array(all_cls[2]), iou_thresh=0.5, score_thresh=0.2)
 
+    cls1 = result_fliter_final(cls1)
+    cls2 = result_fliter_final(cls2)
+    cls3 = result_fliter_final(cls3)
+
+    # 添加标签名准备合并输出txt
     cls1 = np.insert(cls1, 0, 1, axis=1)
     cls2 = np.insert(cls2, 0, 2, axis=1)
     cls3 = np.insert(cls3, 0, 3, axis=1)
-
-    # 覆盖写入本地文件，且文件名与图片相对应
     lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
 
-    # 凭借绝对坐标画框并保存
-    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-    pictured_img_path = os.path.join('../result/only_circles', os.path.basename(events_dir_path) + '.jpg')
-    pictured_img = cv2.imread(pictured_img_path)
-    for line in lines:
-        top_left = (int(line[1]), int(line[2]))
-        bottom_right = (int(line[1] + line[3]), int(line[2] + line[4]))
-        cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[int(line[0]) - 1], 2)
-    cv2.imwrite(os.path.join('../result/visualized', os.path.basename(events_dir_path) + '.jpg'), pictured_img)
+    # (cls,左上绝对x,左上绝对y,w,h,score)
+    # --->(cls,左上相对x,左上相对y,w,h,score)
+    if len(lines) != 0:
+        # 分割后处理坐标为相对坐标
+        cls = lines[:, 0]
+        pos = np.array(lines)[:, 1:3] - 356
+        w = lines[:, 3]
+        h = lines[:, 4]
+        score = lines[:, 5]
+        # 重新拼接
+        temp = np.insert(pos, 0, cls, axis=1)
+        temp = np.insert(temp, 3, w, axis=1)
+        temp = np.insert(temp, 4, h, axis=1)
+        temp = np.insert(temp, 5, score, axis=1)
+        lines = temp
 
-    # 分割后处理坐标为相对坐标
-    cls = lines[:, 0]
-    pos = np.array(lines)[:, 1:3] - 356
-    w = lines[:, 3]
-    h = lines[:, 4]
-    score = lines[:, 5]
-
-    # 重新拼接
-    temp = np.insert(pos, 0, cls, axis=1)
-    temp = np.insert(temp, 3, w, axis=1)
-    temp = np.insert(temp, 4, h, axis=1)
-    temp = np.insert(temp, 5, score, axis=1)
-    lines = temp
-
-    # 筛选置信度大于0.4的
+    # 筛选置信度大于0.2的
     if lines.size != 0:
-        cond = np.where(lines[:, 5] > 0.4)
+        cond = np.where(lines[:, 5] > score_thresh)
         lines = lines[cond]  # 剔除0分
 
     # txt每一行内容确定
     ans = []
     for line in lines:
         cls_name = int(line[0])
-        centerX = int(line[1])
-        centerY = int(line[2])
+        centerX = int(line[1] + line[3] / 2)
+        centerY = int(line[2] + line[4] / 2)
         boxW = int(line[3])
         boxH = int(line[4])
         score = line[5]
@@ -226,16 +259,12 @@ def single_events_inference(events_dir_path, out_label_path, model=None, checkpo
 
 
 # 对一个文件夹内的所有文件夹中的所有图片（所有事件流）进行推理，并使用nms，得到所有事件流的检测结果
-def all_events_inference(all_events_dir_path, out_labels_dir_path):
+def all_events_inference(all_events_dir_path, out_labels_dir_path, config_file, checkpoint_file):
     if not os.path.exists(out_labels_dir_path):
         os.mkdir(out_labels_dir_path)
 
-    # 读取配置
-    config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/batch2_9.pth'
-    device = 'cuda'
-
     # 初始化检测器
+    device = 'cuda'
     model = init_detector(config_file, checkpoint_file, device=device)
 
     # 读取事件流列表，对所有事件流进行处理
@@ -247,5 +276,8 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path):
         single_events_inference(single_events_path, out_label_path, model)
 
 
-# single_events_inference('../datasets/test/data/027', '../result/label/027.txt')
-all_events_inference('../datasets/test/data', '../result/label')
+single_events_inference('../result/only_circles', '../result/only_circles.txt',
+                        config_file='../work_dir_faster/faster.py', checkpoint_file='../work_dir_faster/epoch_12.pth')
+# all_events_inference('../datasets/test/data', '../result/label', '../work_dir_faster/faster.py',
+#                      '../work_dir_faster/epoch_12.pth')
+# all_events_inference('../datasets/test/data', '../result/label', '../work_dir_cascade_r101/cascade_r101.py', '')

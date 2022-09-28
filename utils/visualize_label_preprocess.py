@@ -100,7 +100,7 @@ def convert_label_to_midlle(imgs_path, labels_path, annotation_path, visuallized
 
 
 
-convert_label_to_midlle('../datasets/train/data', '../datasets/train/label', '../datasets/train.pkl',
-                        '../result/visualized_train')
-convert_label_to_midlle('../datasets/val/data', '../datasets/val/label', '../datasets/val.pkl',
+# convert_label_to_midlle('../datasets/train/data', '../datasets/train/label', '../datasets/train.pkl',
+#                         '../result/visualized_train')
+convert_label_to_midlle('../result/val/data', '../result/val/label', '../result/val.pkl',
                         '../result/visualized_val')
