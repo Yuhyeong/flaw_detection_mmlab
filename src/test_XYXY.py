@@ -147,9 +147,9 @@ def img_inference(img_path, model=None, config_file='', checkpoint_file=''):
     cls3 = result_fliter_start(np.array(single_result[2]))
 
     # 对本图片每个检测类使用nms算法
-    cls1 = nms(cls1, iou_thresh=0.4, score_thresh=0.2)
-    cls2 = nms(cls2, iou_thresh=0.4, score_thresh=0.2)
-    cls3 = nms(cls3, iou_thresh=0.4, score_thresh=0.2)
+    cls1 = nms(cls1, iou_thresh=0.05, score_thresh=0.2)
+    cls2 = nms(cls2, iou_thresh=0.05, score_thresh=0.2)
+    cls3 = nms(cls3, iou_thresh=0.05, score_thresh=0.2)
 
     # 输入到本图片检测结果
     img_result[0] = cls1.tolist()

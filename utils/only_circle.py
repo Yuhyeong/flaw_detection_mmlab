@@ -240,7 +240,9 @@ def extract_all_events_denoise(all_events_dir_path, all_new_events_dir_path):
         extract_circle(events_dir_path, new_events_dir_path)
 
 
-extract_circle_and_modify_label('../datasets/val/data', '../datasets/val/label', '../result/val/data',
-                                '../result/val/label')
-extract_circle_and_modify_label('train/data', 'train/label', 'only_circle/data',
-                                'only_circle/label')
+# extract_circle_and_modify_label('../datasets/val/data', '../datasets/val/label', '../result/val/data',
+#                                 '../result/val/label')
+# extract_circle_and_modify_label('train/data', 'train/label', 'only_circle/data',
+#                                 'only_circle/label')
+
+# extract_all_events_denoise('denoise_output_TestSet_gaussian','only_circle_test')

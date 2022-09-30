@@ -23,7 +23,7 @@ def result_fliter_start(cls_detect_array):
     for i in range(len(cls_detect_array)):
         x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
 
-        if (x2 > 706) or (y2 > 706):
+        if ((x2 > 706) or (y2 > 706)) or (((x1 < 10) or (y1 < 10))):
             cls_detect_array[i][4] = 0
 
     cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
@@ -106,12 +106,9 @@ def is_neighbor(xi, yi, xj, yj, dist=20):
 
 # 筛选结果
 def result_fliter_final(cls_detect_array):
-    if len(cls_detect_array) == 0:
-        return np.empty((0, 5))
-
     # 每个框体有几个邻居
     neighbors = np.zeros(len(cls_detect_array))
-    cls_detect_array = np.array(cls_detect_array)
+
     # 遍历所有框体
     for i in range(len(cls_detect_array)):
 
@@ -124,9 +121,9 @@ def result_fliter_final(cls_detect_array):
                 neighbors[i] = neighbors[i] + 1
 
     # 若不为空的结果
-    if len(cls_detect_array) != 0:
+    if cls_detect_array.size != 0:
         # 小于十个邻居的删除
-        cond = np.where(neighbors > 1)
+        cond = np.where(neighbors > 4)
         cls_detect_array = cls_detect_array[cond]  # 小于4个邻居的删除
 
     return cls_detect_array
@@ -171,16 +168,31 @@ def batch_inference(imgs_dir, out_labels_dir, visulized_dir, config_file='', che
 
     img_list = os.listdir(imgs_dir)
     for img_name in img_list:
+        print(img_name)
         img_path = os.path.join(imgs_dir, img_name)
-        out_img_path = os.path.join(out_img_path, img_name)
-        out_label_path = os.path.join(out_labels_dir, img_path[:-3] + 'txt')
+        out_img_path = os.path.join(visulized_dir, img_name)
+        out_label_path = os.path.join(out_labels_dir, img_name[:-3] + 'txt')
 
         pictured_img = cv2.imread(img_path)
 
         result = img_inference(img_path, model)
-        cls1 = result_fliter_final(result[0])
-        cls2 = result_fliter_final(result[1])
-        cls3 = result_fliter_final(result[2])
+        # cls1 = result_fliter_final(result[0])
+        # cls2 = result_fliter_final(result[1])
+        # cls3 = result_fliter_final(result[2])
+
+        if len(result[0]) == 0:
+            cls1 = np.empty((0, 6))
+        else:
+            cls1 = np.array(result[0])
+        if len(result[1]) == 0:
+            cls2 = np.empty((0, 6))
+        else:
+            cls2 = np.array(result[1])
+        if len(result[2]) == 0:
+            cls3 = np.empty((0, 6))
+        else:
+            cls3 = np.array(result[2])
+
         # 添加标签名准备合并输出txt
         cls1 = np.insert(cls1, 0, 1, axis=1)
         cls2 = np.insert(cls2, 0, 2, axis=1)
@@ -192,10 +204,10 @@ def batch_inference(imgs_dir, out_labels_dir, visulized_dir, config_file='', che
             top_left = (int(x1), int(y1))
             bottom_right = (int(x2), int(y2))
 
-            cv2.rectangle(pictured_img,top_left,bottom_right,box_colors[cls-1],2)
+            cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[cls - 1], 2)
             cv2.circle(pictured_img, top_left, 1, (255, 255, 0), 2)
 
-        cv2.iwrite(out_img_path,pictured_img)
+        cv2.imwrite(out_img_path, pictured_img)
 
         # (cls,左上绝对x,左上绝对y,右下绝对x,右下绝对y,score)
         # --->(cls,左上相对x,左上相对y,右下相对x,右下相对y,score)
@@ -238,3 +250,8 @@ def batch_inference(imgs_dir, out_labels_dir, visulized_dir, config_file='', che
         with open(out_label_path, 'w', encoding="utf-8") as f:
             f.write(out)
             f.close()
+
+
+batch_inference('../datasets/test/data_only30', '../result/label', visulized_dir='../result/imgs/faster_0',
+                config_file='../work_dir_faster/faster.py',
+                checkpoint_file='../work_dir_faster/epoch_12.pth')

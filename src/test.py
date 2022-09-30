@@ -11,6 +11,68 @@ from pprint import pprint
 
 # OUTPUT:
 # 输出一堆图片的推理标签
+
+# 对一个（x1,y1,x2,y2,score）的np数组 列表使用nms算法
+def nms_xyxy(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
+    # OUTPUT： 得到对所有框体分别进行nms后的筛选过的框体np数组
+
+    # 若分类检测框数量为空则返回空数np数组
+    if len(cls_detect_array) == 0:
+        return np.empty(shape=(0, 0))
+
+    # 遍历所有框体进行nms合并
+    for i in range(len(cls_detect_array)):
+
+        # 置信度小于0.3的都舍弃
+        if cls_detect_array[i][4] < score_thresh:
+
+            if i == 0:
+                cls_detect_array = np.empty(shape=(0, 0))
+            else:
+                return cls_detect_array[:i, :]
+
+            break
+
+        # 从最高分开始获取框体坐标，并计算框体体积
+        x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+        high_area = (y2 - y1) * (x2 - x1)
+
+        # 将高分框与其他低分框进行交并比计算,若合并则置信度设为0，遍历其余，最后重新按置信度从大到小排序，保持原数组长度不变，最后最后提取非0置信度的元素
+        j = i + 1
+        while j < len(cls_detect_array):
+
+            if cls_detect_array[j][4] == 0:
+                break
+
+            # 获取其他框体坐标
+            x3, y3, x4, y4 = cls_detect_array[j][0], cls_detect_array[j][1], cls_detect_array[j][2], \
+                             cls_detect_array[j][3]
+
+            low_area = (y4 - y3) * (x4 - x3)
+
+            # 计算相交部分框体坐标，若无则返回0
+            and_x1, and_y1, and_x2, and_y2 = np.maximum(x1, x3), np.maximum(y1, y3), np.minimum(x2, x4), np.minimum(y2,
+                                                                                                                    y4)
+            and_w, and_h = np.maximum(0, and_x2 - and_x1), np.maximum(0, and_y2 - and_y1)
+            and_area = and_w * and_h
+
+            # 利用相交的面积和两个框自身的面积计算框的交并比, 将交并比大于阈值的框的置信度设为0，并重排
+            IoU = and_area / (high_area + low_area - and_area)
+            if IoU > iou_thresh:
+                cls_detect_array[j][4] = 0
+
+            j += 1
+
+        # 按置信度排序，获得使用nms算法处理后的检测框列表
+        cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
+
+    if cls_detect_array.size != 0:
+        cond = np.where(cls_detect_array[:, 4] > 0.001)
+        cls_detect_array = cls_detect_array[cond]  # 剔除0分
+
+    return cls_detect_array
+
+
 def single_inference(img_path):
     # 读取配置
     config_file = '../work_dir_faster/faster.py'
@@ -28,14 +90,15 @@ def single_inference(img_path):
 
     for i in range(len(result)):
 
-        clsi_infos = result[i]
+        clsi_infos = nms_xyxy(result[i], 0.05)
+        clsi_infos = result_fliter_start(clsi_infos)
 
         for j in range(len(clsi_infos)):
 
             box_info = clsi_infos[j]
 
-            if box_info[4] >= 0.9:
-                # # custom模型的坐标格式(faster r50)
+            if box_info[4] >= 0.2:
+                # # custom模型的坐标格式(faster r50_mstrain)
                 # x, y, w, h = box_info[0], box_info[1], box_info[2], box_info[3]
                 # top_left = (int(x), int(y))
                 # bottom_right = (int(x + w), int(y + h))
@@ -50,21 +113,21 @@ def single_inference(img_path):
                 cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[i], 2)
 
     cv2.imwrite(os.path.join('../result/', os.path.basename(img_path)), pictured_img)
-    show_result_pyplot(model, img, result, score_thr=0.9)
+    show_result_pyplot(model, img, result, score_thr=0.2)
     print()
 
 
-def result_fliter(cls_detect_array):
+def result_fliter_start(cls_detect_array):
     if len(cls_detect_array) == 0:
         return np.empty(shape=(0, 0))
 
     for i in range(len(cls_detect_array)):
-        x, y, w, h = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
+        x1, y1, x2, y2 = cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[i][2], cls_detect_array[i][3]
 
-        if (x + w > 716) or (y + h > 716):
+        if ((x2 > 706) or (y2 > 706)) or (((x1 < 10) or (y1 < 10))):
             cls_detect_array[i][4] = 0
 
-        cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
+    cls_detect_array = cls_detect_array[np.argsort(-cls_detect_array[:, 4], ), :]
 
     if cls_detect_array.size != 0:
         cond = np.where(cls_detect_array[:, 4] > 0.001)
@@ -74,7 +137,7 @@ def result_fliter(cls_detect_array):
 
 
 # 对 一个（x,y,w,h,score）的np数组 列表使用nms算法
-def nms(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
+def nms_xywh(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
     # INPUT:
     # cls_detect_array: 模型检测出的“一个检测类”框体的np.array:（左上角绝对坐标x,左上角绝对坐标y,w,h,score）
     # threshold: IoU交并比筛选阈值，高于threshold的删除
@@ -228,6 +291,6 @@ def batch_inference_nms(imgs_dir, out_labels_dir, config_file='', checkpoint_fil
 
 
 # batch_inference('../datasets/test/data', '../result/label')
-single_inference('../result/008.jpg')
+single_inference('../datasets/val/data/079_58.jpg')
 # batch_inference_nms('../datasets/test/data_only30', '../result/label', 'faster', )
 # batch_inference_nms('../datasets/test/data_only30', '../result/label', 'cascade', )
