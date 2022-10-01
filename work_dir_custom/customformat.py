@@ -1,5 +1,6 @@
 model = dict(
     type='FasterRCNN',
+    pretrained=None,
     backbone=dict(
         type='ResNet',
         depth=50,
@@ -8,10 +9,7 @@ model = dict(
         frozen_stages=1,
         norm_cfg=dict(type='BN', requires_grad=False),
         norm_eval=True,
-        style='caffe',
-        init_cfg=dict(
-            type='Pretrained',
-            checkpoint='open-mmlab://detectron2/resnet50_caffe')),
+        style='caffe'),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -100,68 +98,79 @@ model = dict(
             nms=dict(type='nms', iou_threshold=0.7),
             min_bbox_size=0),
         rcnn=dict(
-            score_thr=0.05,
-            nms=dict(type='nms', iou_threshold=0.5),
+            score_thr=0.001,
+            nms=dict(type='soft_nms', iou_threshold=0.5),
             max_per_img=100)))
+albu_train_transforms = [
+    dict(type='RandomRotate90', always_apply=False, p=0.5),
+    dict(
+        type='ShiftScaleRotate',
+        shift_limit=0.0625,
+        scale_limit=0.0,
+        rotate_limit=[-10, 10],
+        interpolation=1,
+        p=0.5),
+    dict(type='Rotate', limit=180, p=0.5),
+    dict(
+        type='OneOf',
+        transforms=[
+            dict(type='Blur', blur_limit=3, p=1.0),
+            dict(type='MedianBlur', blur_limit=3, p=1.0)
+        ],
+        p=0.1)
+]
 dataset_type = 'CustomDataset'
-data_root = '../datasets/'
+data_root = 'datasets/'
 img_norm_cfg = dict(
     mean=[103.53, 116.28, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-train_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations', with_bbox=True),
-    dict(
-        type='Resize',
-        img_scale=[(1333, 640), (1333, 672), (1333, 704), (1333, 736),
-                   (1333, 768), (1333, 800)],
-        multiscale_mode='value',
-        keep_ratio=True),
-    dict(type='RandomFlip', flip_ratio=0.5),
-    dict(
-        type='Normalize',
-        mean=[103.53, 116.28, 123.675],
-        std=[1.0, 1.0, 1.0],
-        to_rgb=False),
-    dict(type='Pad', size_divisor=32),
-    dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
-]
-test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(
-        type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
-        flip=False,
-        transforms=[
-            dict(type='Resize', keep_ratio=True),
-            dict(type='RandomFlip'),
-            dict(
-                type='Normalize',
-                mean=[103.53, 116.28, 123.675],
-                std=[1.0, 1.0, 1.0],
-                to_rgb=False),
-            dict(type='Pad', size_divisor=32),
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img'])
-        ])
-]
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=8,
     train=dict(
         type='CustomDataset',
-        ann_file='../datasets/train.pkl',
+        ann_file='train.pkl',
         img_prefix='train/data',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True),
             dict(
                 type='Resize',
-                img_scale=[(1333, 640), (1333, 672), (1333, 704), (1333, 736),
-                           (1333, 768), (1333, 800)],
+                img_scale=[(712, 712), (1424, 1424)],
                 multiscale_mode='value',
                 keep_ratio=True),
-            dict(type='RandomFlip', flip_ratio=0.5),
+            dict(
+                type='RandomFlip',
+                direction=['horizontal', 'vertical'],
+                flip_ratio=[0.5, 0.5]),
+            dict(
+                type='Albu',
+                transforms=[
+                    dict(type='RandomRotate90', always_apply=False, p=0.5),
+                    dict(
+                        type='ShiftScaleRotate',
+                        shift_limit=0.0625,
+                        scale_limit=0.0,
+                        rotate_limit=[-10, 10],
+                        interpolation=1,
+                        p=0.5),
+                    dict(type='Rotate', limit=180, p=0.5),
+                    dict(
+                        type='OneOf',
+                        transforms=[
+                            dict(type='Blur', blur_limit=3, p=1.0),
+                            dict(type='MedianBlur', blur_limit=3, p=1.0)
+                        ],
+                        p=0.1)
+                ],
+                bbox_params=dict(
+                    type='BboxParams',
+                    format='pascal_voc',
+                    label_fields=['gt_labels'],
+                    min_visibility=0.0,
+                    filter_lost_elements=True),
+                keymap=dict(img='image', gt_bboxes='bboxes'),
+                update_pad_shape=False,
+                skip_img_without_anno=True),
             dict(
                 type='Normalize',
                 mean=[103.53, 116.28, 123.675],
@@ -171,21 +180,24 @@ data = dict(
             dict(type='DefaultFormatBundle'),
             dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
         ],
-        data_root='../datasets/',
+        data_root='datasets/',
         classes=('1', '2', '3')),
     val=dict(
         type='CustomDataset',
-        ann_file='../datasets/val.pkl',
+        ann_file='val.pkl',
         img_prefix='val/data',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(
                 type='MultiScaleFlipAug',
-                img_scale=(1333, 800),
+                img_scale=[(712, 712), (1424, 1424)],
                 flip=False,
                 transforms=[
                     dict(type='Resize', keep_ratio=True),
-                    dict(type='RandomFlip'),
+                    dict(
+                        type='RandomFlip',
+                        direction=['horizontal', 'vertical'],
+                        flip_ratio=[0.5, 0.5]),
                     dict(
                         type='Normalize',
                         mean=[103.53, 116.28, 123.675],
@@ -196,21 +208,24 @@ data = dict(
                     dict(type='Collect', keys=['img'])
                 ])
         ],
-        data_root='../datasets/',
+        data_root='datasets/',
         classes=('1', '2', '3')),
     test=dict(
         type='CustomDataset',
-        ann_file='../datasets/test.pkl',
+        ann_file='test.pkl',
         img_prefix='test/data',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(
                 type='MultiScaleFlipAug',
-                img_scale=(1333, 800),
+                img_scale=[(712, 712), (1424, 1424)],
                 flip=False,
                 transforms=[
                     dict(type='Resize', keep_ratio=True),
-                    dict(type='RandomFlip'),
+                    dict(
+                        type='RandomFlip',
+                        direction=['horizontal', 'vertical'],
+                        flip_ratio=[0.5, 0.5]),
                     dict(
                         type='Normalize',
                         mean=[103.53, 116.28, 123.675],
@@ -221,10 +236,10 @@ data = dict(
                     dict(type='Collect', keys=['img'])
                 ])
         ],
-        data_root='../datasets/',
+        data_root='datasets/',
         classes=('1', '2', '3')))
 evaluation = dict(interval=1, metric='mAP')
-optimizer = dict(type='SGD', lr=1.5e-09, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=1.875e-10, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 lr_config = dict(
     policy='step',
@@ -245,7 +260,8 @@ opencv_num_threads = 0
 mp_start_method = 'fork'
 auto_scale_lr = dict(enable=False, base_batch_size=16)
 classes = ('1', '2', '3')
-work_dir = '../work_dir_custom'
+work_dir = 'work_dir_custom'
 seed = 0
-gpu_ids = range(0, 1)
+gpu_ids = [0]
 device = 'cuda'
+auto_resume = False

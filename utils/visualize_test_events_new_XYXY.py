@@ -5,16 +5,41 @@ from mmdet.apis import init_detector, inference_detector, show_result_pyplot
 from pprint import pprint
 
 
-########################################################
-########################################################
-#   用于推理坐标为（x,y,x,y,score）格式的模型
-#   如：faster_rcnn_r50_fpn_1x_coco.py
-#      cascade_rcnn_r101_fpn_1x_coco.py
-########################################################
-########################################################
+# 重命名图片为0填充，保证时序读取图片
+def correct_name(all_events_dir):
+    eve_list = os.listdir(all_events_dir)
+
+    for eve_name in eve_list:
+
+        print(eve_name)
+        eve_dir = os.path.join(all_events_dir, eve_name)
+        img_list = os.listdir(eve_dir)
+
+        for i in range(len(img_list)):
+
+            img_name = img_list[i]
+            ori_path = os.path.join(eve_dir, img_name)
+
+            prefix = img_name.split('_')[0]
+            key_name = img_name.split('.')[0].split('_')[1]
+            postfix = img_name.split('.')[1]
+
+            if len(key_name) == 3:
+                pass
+            elif len(key_name) == 2:
+                key_name = '0' + key_name
+            elif len(key_name) == 1:
+                key_name = '00' + key_name
+
+            new_name = prefix + '_' + key_name + '.' + postfix
+
+            new_path = os.path.join(eve_dir, new_name)
+            os.rename(ori_path, new_path)
+
+        pprint(img_list)
 
 
-# 剔除框体在图像外的
+# 图片周围的框删除
 def result_fliter_start(cls_detect_array):
     if len(cls_detect_array) == 0:
         return np.empty(shape=(0, 0))
@@ -95,42 +120,6 @@ def nms(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
     return cls_detect_array
 
 
-# 左上角点若在周围20个像素里则认为是邻居
-def is_neighbor(xi, yi, xj, yj, dist=20):
-    if abs(xj - xi) < dist and abs(yj - yi) < dist:
-        return True
-    else:
-        return False
-
-
-# 筛选结果
-def result_fliter_final(cls_detect_array):
-    if len(cls_detect_array) == 0:
-        return np.empty((0, 5))
-
-    # 每个框体有几个邻居
-    neighbors = np.zeros(len(cls_detect_array))
-    cls_detect_array = np.array(cls_detect_array)
-    # 遍历所有框体
-    for i in range(len(cls_detect_array)):
-
-        # 判定与其他框体是否为邻居
-        for j in range(len(cls_detect_array)):
-
-            # 若是则邻居加一
-            if is_neighbor(cls_detect_array[i][0], cls_detect_array[i][1], cls_detect_array[j][0],
-                           cls_detect_array[j][1]):
-                neighbors[i] = neighbors[i] + 1
-
-    # 若不为空的结果
-    if len(cls_detect_array) != 0:
-        # 小于十个邻居的删除
-        cond = np.where(neighbors > 1)
-        cls_detect_array = cls_detect_array[cond]  # 小于4个邻居的删除
-
-    return cls_detect_array
-
-
 # 对一个图片进行推理，得到三类检测列表
 def img_inference(img_path, model=None, config_file='', checkpoint_file=''):
     if model == None:
@@ -160,7 +149,7 @@ def img_inference(img_path, model=None, config_file='', checkpoint_file=''):
 
 def single_events_inference(events_dir_path, out_label_path, visulized_dir, model=None, config_file='',
                             checkpoint_file='',
-                            score_thresh=0.2, ):
+                            score_thresh=0.2):
     # OUTPUT:
     # 输出一个事件流的推理标签
 
@@ -168,10 +157,13 @@ def single_events_inference(events_dir_path, out_label_path, visulized_dir, mode
     if model == None:
         device = 'cuda'
         model = init_detector(config_file, checkpoint_file, device=device)
-
     box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+
     # 本图片所有分类的瑕疵框体
     all_cls = [[], [], []]
+
+    loaction_map = np.zeros((10, 10), dtype=int)
+    location_gap = 712 / 10
 
     # 读取所有图片并提取信息，遍历图片
     img_list = os.listdir(events_dir_path)
@@ -180,11 +172,36 @@ def single_events_inference(events_dir_path, out_label_path, visulized_dir, mode
         # 设置单张图片输入输出路径
         img_path = os.path.join(events_dir_path, img)
         imr_result = img_inference(img_path, model)
+        loaction_map_status = np.full((10, 10), False, dtype=bool)  # 每一帧重置状态
 
         # 输入到本事件流全检测中
         all_cls[0] += imr_result[0]
         all_cls[1] += imr_result[1]
         all_cls[2] += imr_result[2]
+
+        # 本帧检测结果
+        lines = np.array(imr_result[0] + imr_result[1] + imr_result[2])
+        # 遍历本帧所有框体，存在则更新对应棋盘格状态
+        for line in lines:
+            x1 = int(line[0])
+            y1 = int(line[1])
+            x_loc = int(x1 // location_gap)
+            y_loc = int(y1 // location_gap)
+            loaction_map_status[x_loc, y_loc] = True
+        # 得到本帧所落棋盘格
+        true_conds = np.where(loaction_map_status == True)
+        false_conds = np.where(loaction_map_status == False)
+
+        for i in range(len(true_conds[0])):
+            if loaction_map[true_conds[0][i], true_conds[1][i]] < 10:
+                loaction_map[true_conds[0][i], true_conds[1][i]] += 1
+        for i in range(len(false_conds[0])):
+            if loaction_map[false_conds[0][i], false_conds[1][i]] < 10:
+                loaction_map[false_conds[0][i], false_conds[1][i]] = 0
+
+    status_cond = np.where(loaction_map == 10)
+    loaction_map_status = np.full((10, 10), False, dtype=bool)  # 每一帧重置状态
+    loaction_map_status[status_cond] = True
 
     # 同一事件流下每一类的大团圆
     cls1 = nms(np.array(all_cls[0]), iou_thresh=0.05, score_thresh=0.2)
@@ -201,19 +218,28 @@ def single_events_inference(events_dir_path, out_label_path, visulized_dir, mode
     cls3 = np.insert(cls3, 0, 3, axis=1)
     lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
 
-    img_path =os.path.join('../result/imgs/only_circles', os.path.basename(events_dir_path) + '.jpg')
+    for i in range(len(lines)):
+        x_loc = int(lines[i][1] // location_gap)
+        y_loc = int(lines[i][2] // location_gap)
+        if not loaction_map_status[x_loc, y_loc]:
+            lines[i][5] = 0
 
+    if len(lines) == 0:
+        lines = np.empty((0, 6))
+
+    final_cond = np.where(lines[:, 5] > 0.001)
+    lines = lines[final_cond]
+
+    # 画框画图
+    img_path = os.path.join('../datasets/test/data_only30', os.path.basename(events_dir_path) + '.jpg')
     pictured_img = cv2.imread(img_path)
-
     for line in lines:
         cls, x1, y1, x2, y2 = int(line[0]), line[1], line[2], line[3], line[4]
         top_left = (int(x1), int(y1))
         bottom_right = (int(x2), int(y2))
-
         cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[cls - 1], 2)
         cv2.circle(pictured_img, top_left, 1, (255, 255, 0), 2)
-
-    cv2.imwrite(os.path.join(visulized_dir,os.path.basename(events_dir_path) + '.jpg'), pictured_img)
+    cv2.imwrite(os.path.join(visulized_dir, os.path.basename(events_dir_path) + '.jpg'), pictured_img)
 
     # (cls,左上绝对x,左上绝对y,右下绝对x,右下绝对y,score)
     # --->(cls,左上相对x,左上相对y,右下相对x,右下相对y,score)
@@ -274,12 +300,11 @@ def all_events_inference(all_events_dir_path, out_labels_dir_path, config_file, 
         # 单事件流文件夹
         single_events_path = os.path.join(all_events_dir_path, events_name)
         out_label_path = os.path.join(out_labels_dir_path, events_name + '.txt')
-        single_events_inference(single_events_path, out_label_path, visulized_dir, model=model)
+        single_events_inference(single_events_path, out_label_path, visulized_dir, model)
 
 
-# single_events_inference('../result/only_circles', '../result/only_circles.txt',
-#                         config_file='../work_dir_cascade_r101/cascade_r101.py', checkpoint_file='../work_dir_cascade_r101/epoch_10.pth')
-
-# all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_cascade_r101/cascade_r101.py', checkpoint_file='../work_dir_cascade_r101/epoch_10.pth')
-all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_faster/faster.py',
-                     checkpoint_file='../work_dir_faster/epoch_12.pth', visulized_dir='../result/imgs/faster')
+correct_name('../datasets/test/data')
+# all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_faster/faster.py',
+#                      checkpoint_file='../work_dir_faster/epoch_12.pth', visulized_dir='../result/imgs/faster_1')
+all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_custom/customformat.py',
+                     checkpoint_file='../work_dir_custom/latest.pth', visulized_dir='../result/imgs/custom')

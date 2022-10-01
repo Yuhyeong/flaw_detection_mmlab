@@ -1,8 +1,7 @@
 import os
 import cv2
-import json
 import numpy as np
-from mmdet.apis import init_detector, inference_detector
+from mmdet.apis import init_detector, inference_detector, show_result_pyplot
 from pprint import pprint
 
 
@@ -13,49 +12,6 @@ from pprint import pprint
 #      cascade_rcnn_r101_fpn_1x_coco.py
 ########################################################
 ########################################################
-
-def single_inference(img_path):
-    # 读取配置
-    config_file = '../work_dir_custom/customformat.py'
-    checkpoint_file = '../work_dir_custom/latest.pth'
-    device = 'cuda'
-
-    # 初始化检测器
-    model = init_detector(config_file, checkpoint_file, device=device)
-
-    img = cv2.imread(img_path)
-    pictured_img = img.copy()
-    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-
-    result = inference_detector(model, img_path)
-
-    for i in range(len(result)):
-
-        clsi_infos = nms_xyxy(result[i], 0.05, 0)
-        clsi_infos = result_fliter_start(clsi_infos)
-
-        for j in range(len(clsi_infos)):
-
-            box_info = clsi_infos[j]
-
-            if box_info[4] >= 0:
-                # # custom模型的坐标格式(faster r50_mstrain)
-                # x, y, w, h = box_info[0], box_info[1], box_info[2], box_info[3]
-                # top_left = (int(x), int(y))
-                # bottom_right = (int(x + w), int(y + h))
-
-                # faster r50坐标格式
-                # cascade r101坐标格式
-                x, y, x1, y1 = box_info[0], box_info[1], box_info[2], box_info[3]
-                top_left = (int(x), int(y))
-                bottom_right = (int(x1), int(y1))
-
-                cv2.circle(pictured_img, top_left, 1, (255, 255, 0), 2)
-                cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[i], 2)
-
-    cv2.imwrite(os.path.join('../result/', os.path.basename(img_path)), pictured_img)
-    show_result_pyplot(model, img, result, score_thr=0)
-    print()
 
 
 # 剔除框体在图像外的
@@ -202,72 +158,125 @@ def img_inference(img_path, model=None, config_file='', checkpoint_file=''):
     return img_result
 
 
-def batch_inference(imgs_dir, out_labels_dir, config_file='', checkpoint_file='', score_thresh=0.2):
-    if not os.path.exists(out_labels_dir):
-        os.mkdir(out_labels_dir)
-    # 初始化检测器
+def single_events_inference(events_dir_path, out_label_path, visulized_dir, model=None, config_file='',
+                            checkpoint_file='',
+                            score_thresh=0.2, ):
+    # OUTPUT:
+    # 输出一个事件流的推理标签
+
+    # 若不传入模型，则检查是否有模型路径
+    if model == None:
+        device = 'cuda'
+        model = init_detector(config_file, checkpoint_file, device=device)
+
+    box_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+    # 本图片所有分类的瑕疵框体
+    all_cls = [[], [], []]
+
+    # 读取所有图片并提取信息，遍历图片
+    img_list = os.listdir(events_dir_path)
+    for img in img_list:
+        print(img)
+        # 设置单张图片输入输出路径
+        img_path = os.path.join(events_dir_path, img)
+        imr_result = img_inference(img_path, model)
+
+        # 输入到本事件流全检测中
+        all_cls[0] += imr_result[0]
+        all_cls[1] += imr_result[1]
+        all_cls[2] += imr_result[2]
+
+    # 同一事件流下每一类的大团圆
+    cls1 = nms(np.array(all_cls[0]), iou_thresh=0.05, score_thresh=0.2)
+    cls2 = nms(np.array(all_cls[1]), iou_thresh=0.05, score_thresh=0.2)
+    cls3 = nms(np.array(all_cls[2]), iou_thresh=0.05, score_thresh=0.2)
+
+    # cls1 = result_fliter_final(cls1)
+    # cls2 = result_fliter_final(cls2)
+    # cls3 = result_fliter_final(cls3)
+
+    # 添加标签名准备合并输出txt
+    cls1 = np.insert(cls1, 0, 1, axis=1)
+    cls2 = np.insert(cls2, 0, 2, axis=1)
+    cls3 = np.insert(cls3, 0, 3, axis=1)
+    lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
+
+    # 画框画图
+    img_path = os.path.join('../datasets/test/data_only30', os.path.basename(events_dir_path) + '.jpg')
+    pictured_img = cv2.imread(img_path)
+    for line in lines:
+        cls, x1, y1, x2, y2 = int(line[0]), line[1], line[2], line[3], line[4]
+        top_left = (int(x1), int(y1))
+        bottom_right = (int(x2), int(y2))
+        cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[cls - 1], 2)
+        cv2.circle(pictured_img, top_left, 1, (255, 255, 0), 2)
+    cv2.imwrite(os.path.join(visulized_dir, os.path.basename(events_dir_path) + '.jpg'), pictured_img)
+
+    # (cls,左上绝对x,左上绝对y,右下绝对x,右下绝对y,score)
+    # --->(cls,左上相对x,左上相对y,右下相对x,右下相对y,score)
+    if len(lines) != 0:
+        # 分割后处理坐标为相对坐标
+        cls = lines[:, 0]
+        pos = np.array(lines)[:, 1:5] - 356
+        score = lines[:, 5]
+        # 重新拼接
+        temp = np.insert(pos, 4, score, axis=1)
+        temp = np.insert(temp, 0, cls, axis=1)
+        lines = temp
+
+    # 筛选置信度大于0.2的
+    if lines.size != 0:
+        cond = np.where(lines[:, 5] > score_thresh)
+        lines = lines[cond]  # 剔除0分
+
+    # txt每一行内容确定
+    ans = []
+    for line in lines:
+        cls_name = int(line[0])
+        centerX = int((line[1] + line[3]) / 2)
+        centerY = int((line[2] + line[4]) / 2)
+        boxW = int(line[3] - line[1])
+        boxH = int(line[4] - line[2])
+        score = line[5]
+
+        ans.append(
+            str(cls_name) + ',' + str(centerX) + ',' + str(centerY) + ',' + str(boxW) + ',' + str(boxH) + ',' + str(
+                score))
+
+    # ans中内容写入文件
+    out = ''
+    if len(ans) == 0:
+        out += 'Perfect'
+    else:
+        for line in ans:
+            out += (line + "\n")
+    with open(out_label_path, 'w', encoding="utf-8") as f:
+        f.write(out)
+        f.close()
+
+
+# 对一个文件夹内的所有文件夹中的所有图片（所有事件流）进行推理，并使用nms，得到所有事件流的检测结果
+def all_events_inference(all_events_dir_path, out_labels_dir_path, config_file, checkpoint_file, visulized_dir):
+    if not os.path.exists(out_labels_dir_path):
+        os.mkdir(out_labels_dir_path)
+    if not os.path.exists(visulized_dir):
+        os.mkdir(visulized_dir)
     device = 'cuda'
+    # 初始化检测器
     model = init_detector(config_file, checkpoint_file, device=device)
 
-    img_list = os.listdir(imgs_dir)
-
-    for img_name in img_list:
-        print(img_name)
-        img_path = os.path.join(imgs_dir, img_name)
-        out_label_path = os.path.join(out_labels_dir, img_name[:-3] + 'txt')
-
-        result = img_inference(img_path, model)
-        # cls1 = result_fliter_final(result[0])
-        # cls2 = result_fliter_final(result[1])
-        # cls3 = result_fliter_final(result[2])
-        # 添加标签名准备合并输出txt
-        cls1 = np.insert(cls1, 0, 1, axis=1)
-        cls2 = np.insert(cls2, 0, 2, axis=1)
-        cls3 = np.insert(cls3, 0, 3, axis=1)
-        lines = np.array(cls1.tolist() + cls2.tolist() + cls3.tolist())
-
-        # (cls,左上绝对x,左上绝对y,右下绝对x,右下绝对y,score)
-        # --->(cls,左上相对x,左上相对y,右下相对x,右下相对y,score)
-        if len(lines) != 0:
-            # 分割后处理坐标为相对坐标
-            cls = lines[:, 0]
-            pos = np.array(lines)[:, 1:5] - 356
-            score = lines[:, 5]
-            # 重新拼接
-            temp = np.insert(pos, 4, score, axis=1)
-            temp = np.insert(temp, 0, cls, axis=1)
-            lines = temp
-
-        # 筛选置信度大于0.2的
-        if lines.size != 0:
-            cond = np.where(lines[:, 5] > score_thresh)
-            lines = lines[cond]  # 剔除0分
-
-        # txt每一行内容确定
-        ans = []
-        for line in lines:
-            cls_name = int(line[0])
-            centerX = int((line[1] + line[3]) / 2)
-            centerY = int((line[2] + line[4]) / 2)
-            boxW = int(line[3] - line[1])
-            boxH = int(line[4] - line[2])
-            score = line[5]
-
-            ans.append(
-                str(cls_name) + ',' + str(centerX) + ',' + str(centerY) + ',' + str(boxW) + ',' + str(boxH) + ',' + str(
-                    score))
-
-        # ans中内容写入文件
-        out = ''
-        if len(ans) == 0:
-            out += 'Perfect'
-        else:
-            for line in ans:
-                out += (line + "\n")
-        with open(out_label_path, 'w', encoding="utf-8") as f:
-            f.write(out)
-            f.close()
+    # 读取事件流列表，对所有事件流进行处理
+    events_list = os.listdir(all_events_dir_path)
+    for events_name in events_list:
+        # 单事件流文件夹
+        single_events_path = os.path.join(all_events_dir_path, events_name)
+        out_label_path = os.path.join(out_labels_dir_path, events_name + '.txt')
+        single_events_inference(single_events_path, out_label_path, visulized_dir, model=model)
 
 
-batch_inference('../datasets/val/data', '../result/labels/val', '../work_dir_cascade_r101/cascade_r101.py',
-                '../work_dir_cascade_r101/epoch_10.pth')
+# single_events_inference('../result/only_circles', '../result/only_circles.txt',
+#                         config_file='../work_dir_cascade_r101/cascade_r101.py', checkpoint_file='../work_dir_cascade_r101/epoch_10.pth')
+
+# all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_cascade_r101/cascade_r101.py', checkpoint_file='../work_dir_cascade_r101/epoch_10.pth')
+all_events_inference('../datasets/test/data', '../result/label', config_file='../work_dir_faster/faster.py',
+                     checkpoint_file='../work_dir_faster/epoch_12.pth', visulized_dir='../result/imgs/faster')

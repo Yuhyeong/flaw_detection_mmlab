@@ -4,12 +4,19 @@ from pprint import pprint
 
 f = open("../datasets/train.pkl", 'rb')
 data = pickle.load(f)
-pprint(data)
 
+wrong_list = []
 
+for ann in data:
+    labels = ann['ann']['bboxes']
 
-img_list = os.listdir("../datasets/train/data")
+    # if ann['filename'] == '046_58.jpg':
+    #     pprint(labels)
 
-print(len(data))
+    for line in labels:
+        xmin, ymin, xmax, ymax = line[0], line[1], line[2], line[3]
+        if xmin > xmax or ymin > ymax:
+            wrong_list.append(ann['filename'])
 
-print(len(img_list))
+pprint(wrong_list)
+

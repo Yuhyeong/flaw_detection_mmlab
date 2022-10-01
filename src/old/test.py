@@ -75,8 +75,8 @@ def nms_xyxy(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
 
 def single_inference(img_path):
     # 读取配置
-    config_file = '../work_dir_faster/faster.py'
-    checkpoint_file = '../work_dir_faster/epoch_12.pth'
+    config_file = '../work_dir_custom/customformat.py'
+    checkpoint_file = '../work_dir_custom/latest.pth'
     device = 'cuda'
 
     # 初始化检测器
@@ -90,14 +90,14 @@ def single_inference(img_path):
 
     for i in range(len(result)):
 
-        clsi_infos = nms_xyxy(result[i], 0.05)
+        clsi_infos = nms_xyxy(result[i], 0.05,0)
         clsi_infos = result_fliter_start(clsi_infos)
 
         for j in range(len(clsi_infos)):
 
             box_info = clsi_infos[j]
 
-            if box_info[4] >= 0.2:
+            if box_info[4] >= 0:
                 # # custom模型的坐标格式(faster r50_mstrain)
                 # x, y, w, h = box_info[0], box_info[1], box_info[2], box_info[3]
                 # top_left = (int(x), int(y))
@@ -113,7 +113,7 @@ def single_inference(img_path):
                 cv2.rectangle(pictured_img, top_left, bottom_right, box_colors[i], 2)
 
     cv2.imwrite(os.path.join('../result/', os.path.basename(img_path)), pictured_img)
-    show_result_pyplot(model, img, result, score_thr=0.2)
+    show_result_pyplot(model, img, result, score_thr=0)
     print()
 
 
@@ -190,7 +190,7 @@ def nms_xywh(cls_detect_array, iou_thresh=0.5, score_thresh=0.2):
 
             # 利用相交的面积和两个框自身的面积计算框的交并比, 将交并比大于阈值的框的置信度设为0，并重排
             IoU = and_area / (high_area + low_area - and_area)
-            if IoU > threshold:
+            if IoU > iou_thresh:
                 cls_detect_array[j][4] = 0
 
             j += 1
@@ -291,6 +291,6 @@ def batch_inference_nms(imgs_dir, out_labels_dir, config_file='', checkpoint_fil
 
 
 # batch_inference('../datasets/test/data', '../result/label')
-single_inference('../datasets/val/data/079_58.jpg')
+single_inference('../datasets/test/data_only30/006.jpg')
 # batch_inference_nms('../datasets/test/data_only30', '../result/label', 'faster', )
 # batch_inference_nms('../datasets/test/data_only30', '../result/label', 'cascade', )
