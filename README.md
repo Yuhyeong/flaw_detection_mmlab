@@ -32,7 +32,7 @@ py文件有详细注释。
 
 [视频：自定义数据集转中间格式讲解](https://www.bilibili.com/video/BV1bM4y1g7Hf?p=4&vd_source=f71295355febbf9584b3fc0781438a910)
 
-[视频：从环境搭建、数据转换、训练的代码实操](https://www.bilibili.com/video/BV1bM4y1g7Hf?p=4&vd_source=f71295355febbf9584b3fc0781438a910)
+[视频：从环境搭建、数据转换、训练的代码实操](https://www.bilibili.com/video/BV1bM4y1g7Hf?p=5&vd_source=f71295355febbf9584b3fc0781438a91)
 
 [配套ipynb文件](https://github.com/open-mmlab/OpenMMLabCourse/blob/main/codes/lec4.ipynb)
 
